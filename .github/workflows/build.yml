@@ -17,13 +17,17 @@ jobs:
   ufbt-build:
     runs-on: ubuntu-latest
     strategy:
+      fail-fast: false
       matrix:
         include:
-          - name: dev channel
+          - name: stock dev channel
             sdk-channel: dev
-          - name: release channel
+          - name: stock release channel
             sdk-channel: release
-          # You can add unofficial channels here. See ufbt action docs for more info.
+          # Momentum firmware: served from its own update index, release channel.
+          - name: momentum release channel
+            sdk-channel: release
+            sdk-index-url: https://up.momentum-fw.dev/firmware/directory.json
     name: 'ufbt: Build for ${{ matrix.name }}'
     steps:
       - name: Checkout
@@ -33,9 +37,10 @@ jobs:
         id: build-app
         with:
           sdk-channel: ${{ matrix.sdk-channel }}
+          sdk-index-url: ${{ matrix.sdk-index-url }}
       - name: Upload app artifacts
         uses: actions/upload-artifact@v4
         with:
           # See ufbt action docs for other output variables
-          name: ${{ github.event.repository.name }}-${{ steps.build-app.outputs.suffix }}
+          name: ${{ github.event.repository.name }}-${{ matrix.sdk-index-url && 'momentum' || 'stock' }}-${{ steps.build-app.outputs.suffix }}
           path: ${{ steps.build-app.outputs.fap-artifacts }}
