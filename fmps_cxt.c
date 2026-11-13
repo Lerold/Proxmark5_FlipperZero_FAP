@@ -37,6 +37,23 @@ static void fmps_cxt_open_status_page(void* context) {
     view_dispatcher_send_custom_event(app->view_dispatcher, Proxmark5CustomEventOpenStatusPage);
 }
 
+static void fmps_cxt_open_relay_page(void* context) {
+    Proxmark5App* app = context;
+    view_dispatcher_send_custom_event(app->view_dispatcher, Proxmark5CustomEventOpenRelayPage);
+}
+
+static void fmps_cxt_open_relay_source_page(void* context) {
+    Proxmark5App* app = context;
+    view_dispatcher_send_custom_event(
+        app->view_dispatcher, Proxmark5CustomEventOpenRelaySourcePage);
+}
+
+static void fmps_cxt_open_relay_sink_page(void* context) {
+    Proxmark5App* app = context;
+    view_dispatcher_send_custom_event(
+        app->view_dispatcher, Proxmark5CustomEventOpenRelaySinkPage);
+}
+
 static bool fmps_cxt_custom_event_callback(void* context, uint32_t event) {
     Proxmark5App* app = context;
 
@@ -55,6 +72,17 @@ static bool fmps_cxt_custom_event_callback(void* context, uint32_t event) {
     case Proxmark5CustomEventOpenStatusPage:
         view_dispatcher_switch_to_view(app->view_dispatcher, StatusPageViewId);
         status_page_start(app->status_page);
+        return true;
+    case Proxmark5CustomEventOpenRelayPage:
+        view_dispatcher_switch_to_view(app->view_dispatcher, RelayPageViewId);
+        return true;
+    case Proxmark5CustomEventOpenRelaySourcePage:
+        view_dispatcher_switch_to_view(app->view_dispatcher, RelaySourcePageViewId);
+        relay_source_page_start(app->relay_source_page);
+        return true;
+    case Proxmark5CustomEventOpenRelaySinkPage:
+        view_dispatcher_switch_to_view(app->view_dispatcher, RelaySinkPageViewId);
+        relay_sink_page_start(app->relay_sink_page);
         return true;
     default:
         return false;
@@ -86,6 +114,25 @@ static uint32_t status_page_previous_callback(void* context) {
     return OperatePageViewId;
 }
 
+// The relay role selector is a submenu (no worker), so its Back just returns to
+// the functions menu.
+static uint32_t relay_page_previous_callback(void* context) {
+    UNUSED(context);
+    return OperatePageViewId;
+}
+
+static uint32_t relay_source_page_previous_callback(void* context) {
+    RelaySourcePage* relay_source_page = context;
+    relay_source_page_stop(relay_source_page);
+    return RelayPageViewId;
+}
+
+static uint32_t relay_sink_page_previous_callback(void* context) {
+    RelaySinkPage* relay_sink_page = context;
+    relay_sink_page_stop(relay_sink_page);
+    return RelayPageViewId;
+}
+
 Proxmark5App* proxmark5_app_alloc() {
     Proxmark5App* app = calloc(1, sizeof(Proxmark5App));
     app->gui = furi_record_open(RECORD_GUI);
@@ -106,6 +153,8 @@ Proxmark5App* proxmark5_app_alloc() {
         fmps_cxt_open_read_hf14a_page,
         app,
         fmps_cxt_open_status_page,
+        app,
+        fmps_cxt_open_relay_page,
         app);
     view_set_previous_callback(
         submenu_get_view(app->operate_page->submenu), operate_page_previous_callback);
@@ -140,6 +189,37 @@ Proxmark5App* proxmark5_app_alloc() {
     view_dispatcher_add_view(
         app->view_dispatcher, StatusPageViewId, status_page_get_view(app->status_page));
 
+    // Relay role selector (submenu): items open the Source/Sink worker pages.
+    app->relay_page = relay_page_create(
+        fmps_cxt_open_relay_source_page, app, fmps_cxt_open_relay_sink_page, app);
+    view_set_previous_callback(
+        submenu_get_view(app->relay_page->submenu), relay_page_previous_callback);
+    view_dispatcher_add_view(
+        app->view_dispatcher, RelayPageViewId, submenu_get_view(app->relay_page->submenu));
+
+    // Shared radio ownership lock for the two relay roles.
+    app->relay_radio_mutex = furi_mutex_alloc(FuriMutexTypeNormal);
+
+    // Relay Source (read card & TX over 433 MHz).
+    app->relay_source_page =
+        relay_source_page_create(fmps_cxt_open_relay_page, app, app->relay_radio_mutex);
+    view_set_previous_callback(
+        relay_source_page_get_view(app->relay_source_page), relay_source_page_previous_callback);
+    view_dispatcher_add_view(
+        app->view_dispatcher,
+        RelaySourcePageViewId,
+        relay_source_page_get_view(app->relay_source_page));
+
+    // Relay Sink (RX over 433 MHz & emulate).
+    app->relay_sink_page =
+        relay_sink_page_create(fmps_cxt_open_relay_page, app, app->relay_radio_mutex);
+    view_set_previous_callback(
+        relay_sink_page_get_view(app->relay_sink_page), relay_sink_page_previous_callback);
+    view_dispatcher_add_view(
+        app->view_dispatcher,
+        RelaySinkPageViewId,
+        relay_sink_page_get_view(app->relay_sink_page));
+
     // Set the back event callback to handle the back button press, and pass the app context to it
     view_dispatcher_set_event_callback_context(app->view_dispatcher, app);
     view_dispatcher_set_navigation_event_callback(
@@ -157,6 +237,9 @@ void proxmark5_app_free(Proxmark5App* app) {
     view_dispatcher_remove_view(app->view_dispatcher, ReadHitag2PageViewId);
     view_dispatcher_remove_view(app->view_dispatcher, ReadHf14aPageViewId);
     view_dispatcher_remove_view(app->view_dispatcher, StatusPageViewId);
+    view_dispatcher_remove_view(app->view_dispatcher, RelayPageViewId);
+    view_dispatcher_remove_view(app->view_dispatcher, RelaySourcePageViewId);
+    view_dispatcher_remove_view(app->view_dispatcher, RelaySinkPageViewId);
     if(app->main_page) {
         main_page_free(app->main_page);
         app->main_page = NULL;
@@ -176,6 +259,24 @@ void proxmark5_app_free(Proxmark5App* app) {
     if(app->status_page) {
         status_page_free(app->status_page);
         app->status_page = NULL;
+    }
+    if(app->relay_page) {
+        relay_page_free(app->relay_page);
+        app->relay_page = NULL;
+    }
+    if(app->relay_source_page) {
+        relay_source_page_free(app->relay_source_page);
+        app->relay_source_page = NULL;
+    }
+    if(app->relay_sink_page) {
+        relay_sink_page_free(app->relay_sink_page);
+        app->relay_sink_page = NULL;
+    }
+    // Safe now: both relay page frees joined their workers, which release the
+    // mutex before exiting, so nothing still holds it.
+    if(app->relay_radio_mutex) {
+        furi_mutex_free(app->relay_radio_mutex);
+        app->relay_radio_mutex = NULL;
     }
     view_dispatcher_free(app->view_dispatcher);
     furi_record_close(RECORD_GUI);

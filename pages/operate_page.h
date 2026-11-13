@@ -6,6 +6,7 @@
 typedef void (*OperatePageReadHitag2Callback)(void* context);
 typedef void (*OperatePageOpenHf14aCallback)(void* context);
 typedef void (*OperatePageOpenStatusCallback)(void* context);
+typedef void (*OperatePageOpenRelayCallback)(void* context);
 
 typedef struct {
     Submenu* submenu;
@@ -16,6 +17,8 @@ typedef struct {
     void* open_hf14a_callback_context;
     OperatePageOpenStatusCallback open_status_callback;
     void* open_status_callback_context;
+    OperatePageOpenRelayCallback open_relay_callback;
+    void* open_relay_callback_context;
 } OperatePage;
 
 OperatePage* operate_page_create(
@@ -24,7 +27,9 @@ OperatePage* operate_page_create(
     OperatePageOpenHf14aCallback open_hf14a_callback,
     void* open_hf14a_callback_context,
     OperatePageOpenStatusCallback open_status_callback,
-    void* open_status_callback_context);
+    void* open_status_callback_context,
+    OperatePageOpenRelayCallback open_relay_callback,
+    void* open_relay_callback_context);
 void operate_page_free(OperatePage* operate_page);
 
 #endif // OPERATE_PAGE_H

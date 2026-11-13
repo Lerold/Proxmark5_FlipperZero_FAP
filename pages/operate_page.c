@@ -5,6 +5,7 @@ typedef enum {
     OperateSubmenuIndexReadHitag2 = 0,
     OperateSubmenuIndexHf14a,
     OperateSubmenuIndexStatus,
+    OperateSubmenuIndexRelay,
 } OperateSubmenuIndex;
 
 static void operate_page_submenu_callback(void* context, uint32_t index) {
@@ -30,6 +31,11 @@ static void operate_page_submenu_callback(void* context, uint32_t index) {
             operate_page->open_status_callback(operate_page->open_status_callback_context);
         }
         break;
+    case OperateSubmenuIndexRelay:
+        if(operate_page->open_relay_callback) {
+            operate_page->open_relay_callback(operate_page->open_relay_callback_context);
+        }
+        break;
     default:
         break;
     }
@@ -41,7 +47,9 @@ OperatePage* operate_page_create(
     OperatePageOpenHf14aCallback open_hf14a_callback,
     void* open_hf14a_callback_context,
     OperatePageOpenStatusCallback open_status_callback,
-    void* open_status_callback_context) {
+    void* open_status_callback_context,
+    OperatePageOpenRelayCallback open_relay_callback,
+    void* open_relay_callback_context) {
     OperatePage* operate_page = calloc(1, sizeof(OperatePage));
     if(!operate_page) {
         return NULL;
@@ -53,6 +61,8 @@ OperatePage* operate_page_create(
     operate_page->open_hf14a_callback_context = open_hf14a_callback_context;
     operate_page->open_status_callback = open_status_callback;
     operate_page->open_status_callback_context = open_status_callback_context;
+    operate_page->open_relay_callback = open_relay_callback;
+    operate_page->open_relay_callback_context = open_relay_callback_context;
 
     operate_page->submenu = submenu_alloc();
     submenu_set_header(operate_page->submenu, "Functions Menu");
@@ -72,6 +82,12 @@ OperatePage* operate_page_create(
         operate_page->submenu,
         "Hardware Status",
         OperateSubmenuIndexStatus,
+        operate_page_submenu_callback,
+        operate_page);
+    submenu_add_item(
+        operate_page->submenu,
+        "Relay",
+        OperateSubmenuIndexRelay,
         operate_page_submenu_callback,
         operate_page);
 

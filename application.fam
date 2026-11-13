@@ -27,5 +27,14 @@ App(
                 "proxmark5_frame.c",
             ],
         ),
+        # Relay protocol + half-duplex Sub-GHz link, shared by the relay pages.
+        Lib(
+            name="relay",
+            fap_include_paths=["."],
+            sources=[
+                "relay_proto.c",
+                "subghz_link.c",
+            ],
+        ),
     ],
 )
